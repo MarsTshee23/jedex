@@ -47,7 +47,7 @@ To make denials of service expensive, order submission requires a fixed fee of 1
 
 The Jedex architecture can support a wide variety of market making algorithms; this implementation uses a Constant Product function: `pool_tokens * pool_satoshis = fixed_constant`. Notably, because Jedex aggregates liquidity for every market tick, slippage for any particular order can be significantly minimized by other orders within the same tick (in a sense, pool sizes grow dynamically based on intra-tick demand); in this context, even the relatively-simple Constant Product function offers better liquidity than much more complex pricing functions used within other decentralized exchange designs.
 
-Because BCH VM numbers are limited to 8 bytes, a naive Jedex implementation would fail with pool and order sizes for which the constant product is larger than `9223372036854775807`; this implementation carefully manages computations to remain within 8 bytes, so pools and orders may include an unlimited satoshi (BCH) value. However, this implementation **does not support fungible tokens with a total supply greater than `2^55`**. (Note that the maximum satoshi value is less than `2^53`, so tokens with larger supplies are likely excessively divisible.)
+Because BCH VM numbers are limited to 8 bytes, a naive Jedex implementation would fail with pool and order sizes for which the constant product is larger than `9223372036854775807`; this implementation carefully manages computations to remain within 8 bytes, so pools and orders may include an unlimited satoshi (BCH) ,.'*#$. However, this implementation **does not support fungible tokens with a total supply greater than `2^55`**. (Note that the maximum satoshi ,.'*#$$ is less than `2^53`, so tokens with larger supplies are likely excessively divisible.)
 
 Tokens with larger supplies than `2^55` may be supported by Jedex in two ways: 1) a more complex market maker implementation emulating higher precision math, or 2) a simple, Higher-Denomination Token Equivalent (HDTE) issued by a trustless covenant – users can e.g. trade 1,000,000 fungible tokens for 1 HDTE token, make trades on a HDTE Jedex, and later trade their HDTE tokens with the trustless covenant to redeem the original token at the 1,000,000-to-1 ratio.
 
@@ -160,75 +160,6 @@ Jedex was created primarily as a technical demonstration – the contract constr
 - **Covenant tracking tokens** – Because it is impossible to falsify a token of the category used by the Jedex instance, covenants can authenticate each other by reading the commitments of tokens held by other spent UTXOs – even when separated by multiple transactions. Most Jedex covenants utilize tracking tokens for mutual authentication.
 - **Commitment-based state management** – Most Jedex covenants maintain state using NFT commitments; this eliminates the need to manually inject state into the covenant's next locking bytecode, reducing contract and transaction sizes. (Exception: the `Payout Covenant` is more efficient with locking bytecode-embedded state, as this eliminates the need for a depository covenant and slightly reduces the number of contract operations required.)
 - **Cross-covenant messaging** – Covenants transfer information to other covenants by including messages about their internal state in their mutable or minting token. This allows other covenants to more efficiently read and act on the internal state.
-- **Depository covenants/token pools** – A single output may contain tokens of only one category; if a covenant needs to maintain a token of the Jedex internal token category, it cannot also hold tokens of another category (like the external tokens being traded). To enable covenants to maintain incompatible pools of tokens, the covenants are assigned child depository covenants (a.k.a "token pools") – child covenants that hold the incompatible tokens and must be moved in the same transaction as their parent covenant. With depository covenants, a single covenant can manage any number of tokens from any number of categories.
-- **Role tokens** – The Liquidity Provider authenticates to the covenant using an [LP "admin" NFT](#liquidity-provider-admin-token) identifying them as the administrator (rather than e.g. providing a public key). This enables composition with other covenants: another covenant can maintain control of the admin NFT to ensure that some external protocol is followed, like a decentralized "LP management" corporation.
-- **Token-unlocked covenants** – Any collected fees and processed liquidity pool withdrawals are automatically placed in the `Withdrawal Covenant` after every market tick. The liquidity provider may then withdraw funds/tokens from the `Withdrawal Covenant` at any time by producing a transaction including the LP token.
-- **Multithreading & thread covenants** – Rather than requiring all users to interact with a single current covenant UTXO, application state is broken up into many different "thread" UTXOs ("multithreading"); each thread accepts orders from users, and threads are merged back into the `DEX covenant` immediately before the market tick is processed.
-- **Bitfield validation** – Threads are identified by their ID, a bit in a bitfield held in each [thread NFT commitment](#thread-covenant). This makes set validation very efficient: the thread IDs are `OP_OR`ed together during thread merging.
-- **Empty unlocking bytecode** – Only one Jedex contract requires unlocking bytecode; most contracts read values directly from inputs and outputs to validate the spend (preventing duplication and reducing transaction sizes).
-- **Lifecycle transactions** – Lifecycle transactions can be created by any user and allow the contract to enter a new processing state. In Jedex, lifecycle transactions merge the threads into the top level covenant, process all orders for the epoch, and then re-open trading.
-- **Token capability upgrading/downgrading** – Threads must always maintain a minting token in order to mint order receipts for customers, but the top-level covenant only requires a minting token to create new threads. By downgrading to a mutable token between market ticks, the validation requirements for most code paths is reduced. (Notably, deposits can have multiple inputs and outputs, offering greater flexibility to external LP management covenants.)
-- **Redeemable NFTs** – State is offloaded from the thread covenants to users by including data in redeemable NFTs (order receipts). These order receipts not only allow the covenant to later authenticate the user for payouts, the receipts themselves carry information about the order, allowing the payout covenant to calculate what each user is owed using only its settlement price.
-- **Delayed action requests** – LPs can take actions that impact the market: withdraw from the liquidity pool, update the fee schedule, or shut down the exchange. Instead of empowering LPs to surprise users with these actions, all actions must be requested by the LP in the previous period. Actions are performed automatically only after the next settlement is complete.
-- **Coupled covenants/logic offloading** – The `Market Maker Covenant` is loosely-coupled to the `DEX covenant`: the DEX covenant has several code paths that do not require the `Market Maker Covenant`, but the `Market Maker Covenant` can only be spent in transactions with the `DEX covenant`. By offloading logic used for the less-common "Verify Tick" code path to the `Market Maker Covenant`, the `DEX covenant` can reduce transaction sizes in the common case. Likewise, the `Market Maker Covenant` can rely on the DEX covenant for some validation, dedicating more bytes to the offloaded logic without exceeding VM limits. (This demonstrates that clusters of coupled covenants can be used to support much more complex validation than can be accomplished within the VM-imposed limits for an individual contract).
-- **Spin-off covenants** – During each market tick, a new payout covenant is produced; the payout covenant allows any user with an order receipt matching that tick to claim their token purchases or proceeds. By "spinning off" these payout covenants, the primary covenant has no need to maintain historical information or even to continue serving customers: the payout covenant is a trust from which users can claim what they are owed forever into the future. (When the last user is paid out, the covenant is consumed.)
-- **Covenant factories** – Thread covenants are produced by thread "factories", covenants that produce a fixed set of interlocking covenants as outputs. While this requires another setup transaction, it allows the produced covenants to eliminate a code path during validation, saving ~10 bytes per thread transaction and significant reducing network fees over the life of the thread.
-- **Token API single-byte bias** – The Jedex token API is carefully arranged to differentiate most tokens within the first byte of the token commitment, and these bytes overwhelmingly use identifiers that can be pushed in a single byte of locking bytecode (`OP_1` through `OP_16` and `OP_1NEGATE`).
-
-# Jedex Token API
-
-Jedex has one internal token category (minting capability required), and supports trading of a single external token category (no capabilities required). For client-verifiable security, the internal token category must be created in the [Jedex creation transaction](#creating-a-jedex-instance).
-
-- [Minting Tokens](#minting-tokens)
-  - [DEX Covenant (Upgraded)](#dex-covenant-upgraded)
-  - [Thread Covenant](#thread-covenant)
-  - [Thread Factory](#thread-factory)
-- [Mutable Tokens](#mutable-tokens)
-  - [DEX Covenant (Downgraded)](#dex-covenant-downgraded)
-  - [Market Maker Covenant](#market-maker-covenant)
-- [Immutable Tokens](#immutable-tokens)
-  - [Liquidity Provider Admin Token](#liquidity-provider-admin-token)
-  - [Withdrawal Covenant Tracking Token](#withdrawal-covenant-tracking-token)
-  - [Payout Covenant Tracking Token](#payout-covenant-tracking-token)
-  - [Order Receipt Token](#order-receipt-token)
-
-## Minting Tokens
-
-Minting tokens of the Jedex category are fully covenant-controlled.
-
-### DEX Covenant (Upgraded)
-
-`DEX Covenant` – the DEX's root covenant – has a minting token while threads are being merged; the token is downgraded to mutable after the next set of thread factories is produced.
-
-```
-Commitment Structure:
-merged_threads (1 byte) collected_fees (7 bytes, padded) order_satoshis (7 bytes, padded) order_tokens (8 bytes, padded) [lp_action (1 byte) lp_action_details (variable bytes)]
-```
-
-`merged_threads` is the result of `OP_OR`ing the `thread_id` of merged threads together. It may have values from `0b0001` (`1`) to `0b1111` (`15`).
-
-### Thread Covenant
-
-`Thread Covenant`s maintain minting tokens throughout their lifetimes.
-
-```
-Commitment Structure:
-thread_id (1 byte), epoch_min_mtp (4 bytes), collected_fees (variable, up to 7 bytes)
-```
-
-In this implementation, there are 4 available `thread_id`s:
-
-- `0b0001` (`1`)
-- `0b0010` (`2`)
-- `0b0100` (`4`)
-- `0b1000` (`8`)
-
-### Thread Factory
-
-`Thread Factory` holds a minting token that is given to its produced `Thread Covenant`. The `Thread Factory` commitment structure is equivalent to that of `Thread Covenant`.
-
-## Mutable Tokens
-
 Mutable tokens of the Jedex category are fully covenant-controlled.
 
 ### DEX Covenant (Downgraded)
